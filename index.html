@@ -27,7 +27,7 @@
 
     /* TERMINAL PANEL KIRI - HITAM PUTIH MURNI (CMD STYLE) */
     .terminal-panel {
-      width: 540px;
+      width: 580px;
       background: #000000;
       border-right: 1px solid #3f3f3f;
       display: flex;
@@ -72,7 +72,6 @@
       word-break: break-all;
     }
 
-    /* Input bar - seperti terminal langsung */
     .cmd-input-line {
       display: flex;
       align-items: center;
@@ -100,7 +99,6 @@
       outline: none;
     }
 
-    /* Map container (full color) */
     .map-container {
       flex: 1;
       position: relative;
@@ -113,7 +111,6 @@
       background: #0a2f44;
     }
 
-    /* mini status bottom */
     .status-overlay {
       position: absolute;
       bottom: 12px;
@@ -131,7 +128,7 @@
     .coords-tip {
       position: absolute;
       bottom: 12px;
-      left: 560px;
+      left: 600px;
       background: #000000aa;
       font-family: monospace;
       font-size: 0.6rem;
@@ -158,8 +155,8 @@
       <div class="cmd-line">----------------------------------------------------------------------</div>
       <div class="cmd-line">>  MARINE ROUTER INDONESIA  -  C-LIKE COMMAND INTERFACE</div>
       <div class="cmd-line">>  Commands :</div>
-      <div class="cmd-line">>    bi_gru;          // hanya waypoint (cepat)</div>
-      <div class="cmd-line">>    bi_ltsm;         // semua data (pulau, kapal, pelabuhan)</div>
+      <div class="cmd-line">>    bi_gru;          // hanya waypoint2.json (light mode)</div>
+      <div class="cmd-line">>    bi_ltsm;         // semua data (waypoint.json, islands, ships, ports)</div>
       <div class="cmd-line">>    set_start(lat, lng);   // contoh: set_start(-6.2, 106.8);</div>
       <div class="cmd-line">>    set_end(lat, lng);</div>
       <div class="cmd-line">>    run_route();     // hitung rute & tampilkan waypoint dilewati</div>
@@ -188,10 +185,10 @@
 <script>
   // ===============================================================
   //   MARINE ROUTER CORE - GEOMETRI, WAYPOINT, A*
-  //   TANPA ATTRIBUSI MAPTILER / LEAFLET
+  //   bi_gru  -> pakai waypoint2.json (GRU MODE)
+  //   bi_ltsm -> pakai waypoint.json + islands + ships + ports
   // ===============================================================
   
-  // MAP INIT : MapTiler satellite (warna penuh)
   const map = L.map('map', { zoomControl: true, attributionControl: false }).setView([-2.5, 118], 5);
   L.tileLayer('https://api.maptiler.com/maps/satellite/{z}/{x}/{y}.jpg?key=mP5EMYL63473c6VT5cg6', {
     maxZoom: 19,
@@ -275,9 +272,12 @@
     document.getElementById('statusOverlay').innerHTML = `[SYS] MODE: ${activeMode} | ${msg}`;
   }
   
-  // BUILD WAYPOINT GRAPH
+  // BUILD WAYPOINT GRAPH (dengan atau tanpa obstacle visibility)
   function buildWaypointGraph() {
-    if(!waypoints.length) return;
+    if(!waypoints.length) {
+      termPrint(`[WARN] No waypoints loaded, graph empty.`, true);
+      return;
+    }
     termPrint(`[GRAPH] building waypoint graph (${waypoints.length} nodes, radius 3.0deg)...`);
     wpGraph = {};
     const WP_CONNECT_RADIUS = 3.0;
@@ -314,6 +314,7 @@
     document.getElementById('activeModeLabel').innerText = mode;
     setStatMsg(`loading ${mode}...`);
     termPrint(`================= MODE: ${mode} =================`);
+    
     // reset all
     islands = [];
     waypoints = [];
@@ -328,15 +329,45 @@
     currentRouteCoords = [];
     if(animationInterval) clearInterval(animationInterval);
     
-    // load waypoint.json mandatory
-    try {
-      const res = await fetch('waypoint.json');
-      const data = await res.json();
-      waypoints = (data.waypoints || data || []).filter(w => w.lat && w.lng);
-      termPrint(`waypoint.json loaded -> ${waypoints.length} waypoints`);
-    } catch(e) { termPrint(`ERROR: waypoint.json not found`, true); }
-    
-    if(mode === 'LTSM') {
+    if (mode === 'GRU') {
+      // ========== GRU MODE: hanya waypoint2.json ==========
+      termPrint(`[GRU MODE] loading waypoint2.json (light waypoint set)...`);
+      try {
+        const res = await fetch('waypoint2.json');
+        const data = await res.json();
+        // support format: array of {lat, lng} atau {waypoints: [...]}
+        if (data && data.waypoints && Array.isArray(data.waypoints)) {
+          waypoints = data.waypoints.filter(w => w.lat && w.lng);
+        } else if (Array.isArray(data)) {
+          waypoints = data.filter(w => w.lat && w.lng);
+        } else {
+          waypoints = [];
+        }
+        termPrint(`waypoint2.json loaded -> ${waypoints.length} waypoints (GRU version)`);
+      } catch(e) { 
+        termPrint(`ERROR: waypoint2.json not found! Make sure the file exists.`, true); 
+        waypoints = [];
+      }
+      islands = [];  // no island obstacles in GRU mode
+      termPrint(`[GRU] obstacle detection DISABLED (direct line-of-sight between waypoints)`);
+      
+    } else {
+      // ========== LTSM MODE: waypoint.json + islands + ships + ports ==========
+      termPrint(`[LTSM MODE] loading waypoint.json (main waypoint set)...`);
+      try {
+        const res = await fetch('waypoint.json');
+        const data = await res.json();
+        if (data && data.waypoints && Array.isArray(data.waypoints)) {
+          waypoints = data.waypoints.filter(w => w.lat && w.lng);
+        } else if (Array.isArray(data)) {
+          waypoints = data.filter(w => w.lat && w.lng);
+        } else {
+          waypoints = [];
+        }
+        termPrint(`waypoint.json loaded -> ${waypoints.length} waypoints`);
+      } catch(e) { termPrint(`ERROR: waypoint.json not found`, true); }
+      
+      // islands.json (obstacle)
       try {
         const islRes = await fetch('islands.json');
         const islData = await islRes.json();
@@ -349,9 +380,10 @@
           isl.bbox = { minLat: Math.min(...lats)-0.02, maxLat: Math.max(...lats)+0.02, minLng: Math.min(...lngs)-0.02, maxLng: Math.max(...lngs)+0.02 };
           L.polygon(isl.polygon, { color: '#e6a157', weight: 1.5, fillOpacity: 0.2, fillColor: '#aa6f3c', interactive: false }).addTo(map);
         }
-        termPrint(`islands.json -> ${islands.length} land polygons loaded`);
+        termPrint(`islands.json -> ${islands.length} land polygons loaded (obstacle avoidance enabled)`);
       } catch(e) { termPrint(`islands.json absent, proceeding without obstacles`, true); }
       
+      // ship.json
       try {
         const shipRes = await fetch('ship.json');
         const shipJson = await shipRes.json();
@@ -359,6 +391,7 @@
         termPrint(`ship.json -> ${shipDatabase.length} AIS records`);
       } catch(e) { termPrint(`ship.json not found`, true); }
       
+      // pelabuhan.json
       try {
         const portRes = await fetch('pelabuhan.json');
         const portData = await portRes.json();
@@ -371,17 +404,15 @@
           termPrint(`pelabuhan.json -> ${portsDatabase.length} ports ready`);
         }
       } catch(e) { termPrint(`pelabuhan.json not loaded`, true); }
-    } else {
-      islands = [];
-      termPrint(`[GRU] light mode: no islands blocking / no ships.`);
     }
+    
     islandsReady = true;
     buildWaypointGraph();
     setStatMsg(`${mode} | WP:${waypoints.length}`);
     termPrint(`>> system ready. use set_start(LAT,LNG); and set_end(...); then run_route();`);
   }
   
-  // MINHEAP
+  // MINHEAP for A*
   class MinHeap {
     constructor() { this.h=[]; }
     push(item) { this.h.push(item); this._up(this.h.length-1); }
@@ -392,6 +423,7 @@
   }
   
   function findNearestWaypoints(coord, k=8) {
+    if(!waypoints.length) return [];
     return waypoints.map((wp,i)=> ({i, d: dist(coord,[wp.lat,wp.lng])})).sort((a,b)=>a.d-b.d).slice(0,k);
   }
   function pickReachable(coord, candidates) {
@@ -402,7 +434,7 @@
   
   async function computeRoute() {
     if(!startPoint || !endPoint) { termPrint("ERROR: start & end undefined. use set_start(lat,lng); set_end(lat,lng);", true); return false; }
-    if(!wpReady || waypoints.length===0) { termPrint("ERROR: waypoint graph not ready.", true); return false; }
+    if(!wpReady || waypoints.length===0) { termPrint("ERROR: waypoint graph not ready. Make sure waypoints loaded.", true); return false; }
     if(isRouting) return false;
     isRouting = true;
     termPrint(`[ROUTE] origin: [${startPoint[0].toFixed(5)}, ${startPoint[1].toFixed(5)}] destination: [${endPoint[0].toFixed(5)}, ${endPoint[1].toFixed(5)}]`);
@@ -411,9 +443,13 @@
     }
     const startCands = findNearestWaypoints(startPoint, 12);
     const endCands = findNearestWaypoints(endPoint, 12);
+    if(!startCands.length || !endCands.length) {
+      termPrint("No waypoints found near start/end coordinates.", true);
+      isRouting=false; return false;
+    }
     const startWPs = pickReachable(startPoint, startCands);
     const endWPs = pickReachable(endPoint, endCands);
-    if(!startWPs.length || !endWPs.length) { termPrint("No reachable waypoints near start/end.", true); isRouting=false; return false; }
+    if(!startWPs.length || !endWPs.length) { termPrint("No reachable waypoints near start/end (blocked by islands?).", true); isRouting=false; return false; }
     
     const extraEdges = { 'S': [], 'E': [] };
     for(const {i} of startWPs) { extraEdges['S'].push(i); if(!extraEdges[i]) extraEdges[i]=[]; extraEdges[i].push('S'); }
@@ -444,11 +480,11 @@
         const waypointIds = routeIds.filter(id => id !== 'S' && id !== 'E');
         if(waypointIds.length) {
           termPrint(`[WAYPOINTS TRACE] total intermediate nodes: ${waypointIds.length}`);
-          waypointIds.slice(0, 30).forEach(idx => {
+          waypointIds.slice(0, 35).forEach(idx => {
             const wp = waypoints[idx];
             termPrint(`    wp[${idx}] : lat=${wp.lat.toFixed(5)} lng=${wp.lng.toFixed(5)}`);
           });
-          if(waypointIds.length > 30) termPrint(`    ... and ${waypointIds.length-30} more waypoints`);
+          if(waypointIds.length > 35) termPrint(`    ... and ${waypointIds.length-35} more waypoints`);
         } else {
           termPrint(`[INFO] Direct line-of-sight route, no waypoints passed.`);
         }
@@ -550,13 +586,12 @@
     setStatMsg(`${activeMode} | reset`);
   }
   
-  // ============= COMMAND PARSER (LANGSUNG KETIK) =============
+  // ============= COMMAND PARSER =============
   function parseAndExec(cmdLine) {
     let cmd = cmdLine.trim();
     if(cmd === "") return;
     termPrint(`> ${cmd}`);
     
-    // set_start(lat, lng)
     if(cmd.match(/^set_start\s*\(\s*([+-]?\d*\.?\d+)\s*,\s*([+-]?\d*\.?\d+)\s*\)/)) {
       let match = cmd.match(/^set_start\s*\(\s*([+-]?\d*\.?\d+)\s*,\s*([+-]?\d*\.?\d+)\s*\)/);
       if(match) {
@@ -594,32 +629,24 @@
     else { termPrint(`unknown command: ${cmd}`, true); }
   }
   
-  // ============= INPUT HANDLER (LANGSUNG) =============
   const inputEl = document.getElementById('cmdInput');
-  
   function submitCmd() {
     let val = inputEl.value;
     if(!val) return;
     parseAndExec(val);
     inputEl.value = '';
   }
+  inputEl.addEventListener('keypress', (e) => { if(e.key === 'Enter') submitCmd(); });
   
-  inputEl.addEventListener('keypress', (e) => { 
-    if(e.key === 'Enter') submitCmd(); 
-  });
-  
-  // klik peta -> langsung tampilkan perintah siap pakai di terminal (bukan auto-execute)
   map.on('click', (e) => {
     const lat = e.latlng.lat.toFixed(6);
     const lng = e.latlng.lng.toFixed(6);
     termPrint(`[MAP] clicked: ${lat}, ${lng}   (gunakan: set_start(${lat}, ${lng}); atau set_end(${lat}, ${lng});)`);
   });
   
-  // DEFAULT LOAD GRU
+  // DEFAULT LOAD GRU (waypoint2.json)
   loadDataByMode("GRU");
   setStatMsg("GRU | init");
-  
-  // fokus ke input
   setTimeout(() => inputEl.focus(), 100);
 </script>
 </body>
