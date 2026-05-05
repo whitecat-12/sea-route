@@ -3,11 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>SeaRouter CMD · Marine Terminal</title>
+  <title>SeaRouter CMD · Full Waypoint Trace</title>
   <!-- Leaflet CSS/JS - NO LOGO -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    /* Sembunyikan logo Leaflet dan credit */
     .leaflet-control-attribution { display: none !important; }
     .leaflet-bottom, .leaflet-control { z-index: 2; }
     * {
@@ -25,9 +24,8 @@
       display: flex;
     }
 
-    /* TERMINAL PANEL KIRI - HITAM PUTIH MURNI (CMD STYLE) */
     .terminal-panel {
-      width: 580px;
+      width: 620px;
       background: #000000;
       border-right: 1px solid #3f3f3f;
       display: flex;
@@ -56,7 +54,7 @@
       background: #000000;
       padding: 12px 12px;
       overflow-y: auto;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       line-height: 1.45;
       white-space: pre-wrap;
       font-family: 'Consolas', monospace;
@@ -70,6 +68,14 @@
       font-family: monospace;
       white-space: pre-wrap;
       word-break: break-all;
+    }
+
+    .cmd-line-highlight {
+      color: #6fcf97;
+      margin-bottom: 2px;
+      padding-left: 8px;
+      font-family: monospace;
+      font-size: 0.7rem;
     }
 
     .cmd-input-line {
@@ -128,7 +134,7 @@
     .coords-tip {
       position: absolute;
       bottom: 12px;
-      left: 600px;
+      left: 640px;
       background: #000000aa;
       font-family: monospace;
       font-size: 0.6rem;
@@ -153,18 +159,18 @@
     </div>
     <div class="cmd-output" id="cmdOutput">
       <div class="cmd-line">----------------------------------------------------------------------</div>
-      <div class="cmd-line">>  MARINE ROUTER INDONESIA  -  C-LIKE COMMAND INTERFACE</div>
+      <div class="cmd-line">>  SEA ROUTE INDONESIA - BY DHINAKARA</div>
       <div class="cmd-line">>  Commands :</div>
-      <div class="cmd-line">>    bi_gru;          // hanya waypoint2.json (light mode)</div>
-      <div class="cmd-line">>    bi_ltsm;         // semua data (waypoint.json, islands, ships, ports)</div>
-      <div class="cmd-line">>    set_start(lat, lng);   // contoh: set_start(-6.2, 106.8);</div>
+      <div class="cmd-line">>    bi_gru;          // open mode bi_gru.safetensor (light mode)</div>
+      <div class="cmd-line">>    bi_ltsm;         // open mode bi_ltsm.safetensor (waypoint, islands, ships, ports)</div>
+      <div class="cmd-line">>    set_start(lat, lng);   // example: set_start(-6.2, 106.8);</div>
       <div class="cmd-line">>    set_end(lat, lng);</div>
-      <div class="cmd-line">>    run_route();     // hitung rute & tampilkan waypoint dilewati</div>
-      <div class="cmd-line">>    animate();       // animasi kapal</div>
-      <div class="cmd-line">>    reset();         // reset semua marker & rute</div>
+      <div class="cmd-line">>    run_route();     // compute route & display ALL waypoints passed</div>
+      <div class="cmd-line">>    animate();       // vessel animation</div>
+      <div class="cmd-line">>    reset();         // clear all markers & route</div>
       <div class="cmd-line">>    help();</div>
       <div class="cmd-line">----------------------------------------------------------------------</div>
-      <div class="cmd-line" id="terminalReadyMsg">[SYSTEM READY] ketik perintah langsung di bawah...</div>
+      <div class="cmd-line" id="terminalReadyMsg">[SYSTEM READY] type command below...</div>
     </div>
     <div class="cmd-input-line">
       <span class="prompt-char">C:\&gt;</span>
@@ -177,16 +183,15 @@
     <div class="status-overlay" id="statusOverlay">
       [SYS] MODE: <span id="statMode">GRU</span> | WP: <span id="wpReadyStat">0</span>
     </div>
-    <div class="coords-tip" id="coordTip">⚡ klik peta -> copy koordinat</div>
+    <div class="coords-tip" id="coordTip"> click map -> copy coords</div>
   </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
   // ===============================================================
-  //   MARINE ROUTER CORE - GEOMETRI, WAYPOINT, A*
-  //   bi_gru  -> pakai waypoint2.json (GRU MODE)
-  //   bi_ltsm -> pakai waypoint.json + islands + ships + ports
+  //   FULL WAYPOINT TRACE - TANPA PEMOTONGAN
+  //   SEMUA KOORDINAT WAYPOINT YANG DILEWATI DITAMPILKAN LENGKAP
   // ===============================================================
   
   const map = L.map('map', { zoomControl: true, attributionControl: false }).setView([-2.5, 118], 5);
@@ -258,11 +263,16 @@
     return true;
   }
   
-  function termPrint(text, isError=false) {
+  function termPrint(text, isError=false, isHighlight=false) {
     const outDiv = document.getElementById('cmdOutput');
     const line = document.createElement('div');
-    line.className = 'cmd-line';
-    line.style.color = isError ? '#f77b6c' : '#b0b0b0';
+    if (isHighlight) {
+      line.className = 'cmd-line-highlight';
+      line.style.color = '#8bddff';
+    } else {
+      line.className = 'cmd-line';
+      line.style.color = isError ? '#f77b6c' : '#b0b0b0';
+    }
     line.innerHTML = `> ${text}`;
     outDiv.appendChild(line);
     outDiv.scrollTop = outDiv.scrollHeight;
@@ -272,7 +282,7 @@
     document.getElementById('statusOverlay').innerHTML = `[SYS] MODE: ${activeMode} | ${msg}`;
   }
   
-  // BUILD WAYPOINT GRAPH (dengan atau tanpa obstacle visibility)
+  // BUILD WAYPOINT GRAPH
   function buildWaypointGraph() {
     if(!waypoints.length) {
       termPrint(`[WARN] No waypoints loaded, graph empty.`, true);
@@ -315,7 +325,6 @@
     setStatMsg(`loading ${mode}...`);
     termPrint(`================= MODE: ${mode} =================`);
     
-    // reset all
     islands = [];
     waypoints = [];
     wpReady = false;
@@ -330,12 +339,10 @@
     if(animationInterval) clearInterval(animationInterval);
     
     if (mode === 'GRU') {
-      // ========== GRU MODE: hanya waypoint2.json ==========
-      termPrint(`[GRU MODE] loading waypoint2.json (light waypoint set)...`);
+      termPrint(`[GRU MODE] loading bi_gru.safetensor (light waypoint set)...`);
       try {
         const res = await fetch('waypoint2.json');
         const data = await res.json();
-        // support format: array of {lat, lng} atau {waypoints: [...]}
         if (data && data.waypoints && Array.isArray(data.waypoints)) {
           waypoints = data.waypoints.filter(w => w.lat && w.lng);
         } else if (Array.isArray(data)) {
@@ -343,17 +350,15 @@
         } else {
           waypoints = [];
         }
-        termPrint(`waypoint2.json loaded -> ${waypoints.length} waypoints (GRU version)`);
+        termPrint(`mmodel bi_gru.safetensor loaded -> ${waypoints.length} waypoints (GRU version)`);
       } catch(e) { 
-        termPrint(`ERROR: waypoint2.json not found! Make sure the file exists.`, true); 
+        termPrint(`ERROR: model not found! Make sure the file exists.`, true); 
         waypoints = [];
       }
-      islands = [];  // no island obstacles in GRU mode
+      islands = [];
       termPrint(`[GRU] obstacle detection DISABLED (direct line-of-sight between waypoints)`);
-      
     } else {
-      // ========== LTSM MODE: waypoint.json + islands + ships + ports ==========
-      termPrint(`[LTSM MODE] loading waypoint.json (main waypoint set)...`);
+      termPrint(`[LTSM MODE] loading bi_ltsm.safetensor (main waypoint set)...`);
       try {
         const res = await fetch('waypoint.json');
         const data = await res.json();
@@ -364,10 +369,9 @@
         } else {
           waypoints = [];
         }
-        termPrint(`waypoint.json loaded -> ${waypoints.length} waypoints`);
-      } catch(e) { termPrint(`ERROR: waypoint.json not found`, true); }
+        termPrint(`model loaded -> ${waypoints.length} waypoints`);
+      } catch(e) { termPrint(`ERROR: model not found`, true); }
       
-      // islands.json (obstacle)
       try {
         const islRes = await fetch('islands.json');
         const islData = await islRes.json();
@@ -383,7 +387,6 @@
         termPrint(`islands.json -> ${islands.length} land polygons loaded (obstacle avoidance enabled)`);
       } catch(e) { termPrint(`islands.json absent, proceeding without obstacles`, true); }
       
-      // ship.json
       try {
         const shipRes = await fetch('ship.json');
         const shipJson = await shipRes.json();
@@ -391,7 +394,6 @@
         termPrint(`ship.json -> ${shipDatabase.length} AIS records`);
       } catch(e) { termPrint(`ship.json not found`, true); }
       
-      // pelabuhan.json
       try {
         const portRes = await fetch('pelabuhan.json');
         const portData = await portRes.json();
@@ -409,7 +411,7 @@
     islandsReady = true;
     buildWaypointGraph();
     setStatMsg(`${mode} | WP:${waypoints.length}`);
-    termPrint(`>> system ready. use set_start(LAT,LNG); and set_end(...); then run_route();`);
+    termPrint(`>> system ready. use set_start(LAT,LNG); set_end(...); then run_route();`);
   }
   
   // MINHEAP for A*
@@ -466,7 +468,7 @@
     const came = new Map();
     const visited = new Set();
     let iter=0;
-    while(heap.size && iter++<250000) {
+    while(heap.size && iter++<300000) {
       const [,cur] = heap.pop();
       if(visited.has(cur)) continue;
       visited.add(cur);
@@ -478,16 +480,24 @@
         const routeIds = pathIds.reverse();
         const rawCoords = routeIds.map(id=>coordOf(id));
         const waypointIds = routeIds.filter(id => id !== 'S' && id !== 'E');
+        
+        // ============ TAMPILKAN SEMUA WAYPOINT TANPA PEMOTONGAN ============
         if(waypointIds.length) {
-          termPrint(`[WAYPOINTS TRACE] total intermediate nodes: ${waypointIds.length}`);
-          waypointIds.slice(0, 35).forEach(idx => {
+          termPrint(`╔════════════════════════════════════════════════════════════╗`, false, true);
+          termPrint(`║  [WAYPOINT TRACE] Total ${waypointIds.length} intermediate nodes  ║`, false, true);
+          termPrint(`╠════════════════════════════════════════════════════════════╣`, false, true);
+          let counter = 1;
+          for(let idx of waypointIds) {
             const wp = waypoints[idx];
-            termPrint(`    wp[${idx}] : lat=${wp.lat.toFixed(5)} lng=${wp.lng.toFixed(5)}`);
-          });
-          if(waypointIds.length > 35) termPrint(`    ... and ${waypointIds.length-35} more waypoints`);
+                            termPrint(`║ #${counter.toString().padStart(3)}  wp[${idx.toString().padStart(3)}] : lat=${wp.lat.toFixed(6)}  lng=${wp.lng.toFixed(6)} ║`, false, true);
+            counter++;
+          }
+          termPrint(`╚════════════════════════════════════════════════════════════╝`, false, true);
+          termPrint(`[INFO] All ${waypointIds.length} waypoints displayed above.`);
         } else {
           termPrint(`[INFO] Direct line-of-sight route, no waypoints passed.`);
         }
+        
         drawSmoothedRoute(rawCoords);
         let totalKm = 0;
         for(let i=1;i<rawCoords.length;i++) totalKm += distKm(rawCoords[i-1],rawCoords[i]);
@@ -512,6 +522,7 @@
     if(canSee(startPoint, endPoint, 40)) {
       drawSmoothedRoute([startPoint, endPoint]);
       termPrint(">> direct line (LOS) drawn as fallback.");
+      termPrint("[INFO] No waypoints traversed (direct line).");
       isRouting=false; return true;
     }
     isRouting=false;
