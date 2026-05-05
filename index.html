@@ -352,7 +352,7 @@
         }
         termPrint(`mmodel bi_gru.safetensor loaded -> ${waypoints.length} waypoints (GRU version)`);
       } catch(e) { 
-        termPrint(`ERROR: model not found! Make sure the file exists.`, true); 
+        termPrint(`ERROR: model bi_gru.safetensor not found! Make sure the file exists.`, true); 
         waypoints = [];
       }
       islands = [];
@@ -369,7 +369,7 @@
         } else {
           waypoints = [];
         }
-        termPrint(`model loaded -> ${waypoints.length} waypoints`);
+        termPrint(`model bi_ltsm.safetensor loaded -> ${waypoints.length} waypoints`);
       } catch(e) { termPrint(`ERROR: model not found`, true); }
       
       try {
