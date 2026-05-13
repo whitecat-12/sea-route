@@ -189,7 +189,7 @@
       <div class="cmd-line" id="terminalReadyMsg">[SYSTEM READY] type command below...</div>
       <!-- Input command menyatu dengan output -->
       <div class="cmd-input-line" id="inputContainer">
-        <span class="prompt-char">&gt;</span>
+        <span class="prompt-char">C:\&gt;</span>
         <input type="text" id="cmdInput" placeholder="" autocomplete="off" spellcheck="false">
       </div>
     </div>
@@ -210,6 +210,7 @@
   //   FULL WAYPOINT TRACE - TANPA PEMOTONGAN
   //   SEMUA KOORDINAT WAYPOINT YANG DILEWATI DITAMPILKAN LENGKAP
   //   CMD TANPA TEXT BOX - INPUT MENYATU DENGAN OUTPUT
+  //   DILENGKAPI TITIK WAYPOINT DI PETA
   // ===============================================================
   
   const map = L.map('map', { zoomControl: true, attributionControl: false }).setView([-2.5, 118], 5);
@@ -236,6 +237,7 @@
   let endMarker = null;
   let shipMarker = null;
   let currentRouteCoords = [];
+  let wpMarkers = []; // Array untuk menyimpan marker waypoint
   let animationInterval = null;
   let isRouting = false;
   let activeMode = "GRU";
@@ -349,10 +351,14 @@
     waypoints = [];
     wpReady = false;
     wpGraph = {};
+    
+    // Bersihkan semua layer rute dan marker
     if(routeLine) map.removeLayer(routeLine);
     if(startMarker) map.removeLayer(startMarker);
     if(endMarker) map.removeLayer(endMarker);
     if(shipMarker) map.removeLayer(shipMarker);
+    clearWaypointMarkers();
+    
     routeLine = startMarker = endMarker = shipMarker = null;
     startPoint = endPoint = null;
     currentRouteCoords = [];
@@ -432,6 +438,52 @@
     buildWaypointGraph();
     setStatMsg(`${mode} | WP:${waypoints.length}`);
     termPrint(`>> system ready. use set_start(LAT,LNG); set_end(...); then run_route();`);
+  }
+  
+  // Fungsi untuk membersihkan marker waypoint
+  function clearWaypointMarkers() {
+    if(wpMarkers.length) {
+      wpMarkers.forEach(marker => map.removeLayer(marker));
+      wpMarkers = [];
+    }
+  }
+  
+  // Fungsi untuk menambahkan marker waypoint di peta
+  function addWaypointMarkers(waypointIds) {
+    clearWaypointMarkers();
+    
+    waypointIds.forEach((id, index) => {
+      const wp = waypoints[id];
+      const markerColor = '#ff6b6b';
+      const markerIcon = L.divIcon({
+        html: `<div style="
+          background: ${markerColor};
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          border: 1.5px solid #ffffff;
+          box-shadow: 0 0 6px ${markerColor};
+          opacity: 0.9;
+        "></div>`,
+        iconSize: [8, 8],
+        iconAnchor: [4, 4],
+        className: ''
+      });
+      
+      const marker = L.marker([wp.lat, wp.lng], { 
+        icon: markerIcon,
+        zIndexOffset: 1000 - index
+      }).addTo(map);
+      
+      marker.bindTooltip(`WP #${index+1}: ${wp.lat.toFixed(5)}, ${wp.lng.toFixed(5)}`, {
+        permanent: false,
+        direction: 'top',
+        offset: [0, -6],
+        className: 'wp-tooltip'
+      });
+      
+      wpMarkers.push(marker);
+    });
   }
   
   // MINHEAP for A*
@@ -514,6 +566,9 @@
           }
           termPrint(`╚════════════════════════════════════════════════════════════╝`, false, true);
           termPrint(`[INFO] All ${waypointIds.length} waypoints displayed above.`);
+          
+          // Tampilkan titik waypoint di peta
+          addWaypointMarkers(waypointIds);
         } else {
           termPrint(`[INFO] Direct line-of-sight route, no waypoints passed.`);
         }
@@ -609,6 +664,7 @@
     if(startMarker) map.removeLayer(startMarker);
     if(endMarker) map.removeLayer(endMarker);
     if(shipMarker) map.removeLayer(shipMarker);
+    clearWaypointMarkers();
     if(animationInterval) clearInterval(animationInterval);
     routeLine=startMarker=endMarker=shipMarker=null;
     startPoint=endPoint=null;
